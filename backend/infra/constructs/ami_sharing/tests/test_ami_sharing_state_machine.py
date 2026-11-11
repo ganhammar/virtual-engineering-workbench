@@ -1,13 +1,14 @@
 import json
 
 import assertpy
+import pytest
 
 
 def test_ami_sharing_copy_path(start_execution, wait_for_execution, mocked_test_event):
     # ARRANGE
 
     # ACT
-    execution_arn = start_execution(test_name="CopyPath", test_event=mocked_test_event)
+    execution_arn = start_execution(test_name="CopyPath", test_event=mocked_test_event())
     status, output, history = wait_for_execution(execution_arn=execution_arn)
 
     # ASSERT
@@ -23,7 +24,7 @@ def test_ami_sharing_share_path(start_execution, wait_for_execution, mocked_test
     # ARRANGE
 
     # ACT
-    execution_arn = start_execution(test_name="SharePath", test_event=mocked_test_event)
+    execution_arn = start_execution(test_name="SharePath", test_event=mocked_test_event())
     status, output, history = wait_for_execution(execution_arn=execution_arn)
 
     # ASSERT
@@ -39,7 +40,7 @@ def test_ami_sharing_done_path(start_execution, wait_for_execution, mocked_test_
     # ARRANGE
 
     # ACT
-    execution_arn = start_execution(test_name="DonePath", test_event=mocked_test_event)
+    execution_arn = start_execution(test_name="DonePath", test_event=mocked_test_event())
     status, output, history = wait_for_execution(execution_arn=execution_arn)
 
     # ASSERT
@@ -71,7 +72,7 @@ def test_ami_sharing_license_grant_path(start_execution, wait_for_execution, moc
     # ARRANGE
 
     # ACT
-    execution_arn = start_execution(test_name="LicenseGrantPath", test_event=mocked_test_event)
+    execution_arn = start_execution(test_name="LicenseGrantPath", test_event=mocked_test_event())
     status, output, history = wait_for_execution(execution_arn=execution_arn)
 
     # ASSERT
@@ -87,7 +88,7 @@ def test_ami_sharing_verify_external_grant_path(start_execution, wait_for_execut
     # ARRANGE
 
     # ACT
-    execution_arn = start_execution(test_name="VerifyExternalGrantPath", test_event=mocked_test_event)
+    execution_arn = start_execution(test_name="VerifyExternalGrantPath", test_event=mocked_test_event())
     status, output, history = wait_for_execution(execution_arn=execution_arn)
 
     # ASSERT
@@ -103,8 +104,46 @@ def test_ami_sharing_verify_external_grant_not_found_path(start_execution, wait_
     # ARRANGE
 
     # ACT
-    execution_arn = start_execution(test_name="VerifyExternalGrantNotFoundPath", test_event=mocked_test_event)
+    execution_arn = start_execution(test_name="VerifyExternalGrantNotFoundPath", test_event=mocked_test_event())
     status, output, history = wait_for_execution(execution_arn=execution_arn)
 
     # ASSERT
     assertpy.assert_that(status).is_equal_to("FAILED")
+
+
+def _entered_states(history) -> list[str]:
+    return [
+        event["stateEnteredEventDetails"]["name"] for event in history["events"] if "stateEnteredEventDetails" in event
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_name,license_states",
+    (
+        (
+            "CopyLicenseGrantPath",
+            ["CopyAmiLambda", "ShareAmiLambda", "CreateLicenseGrantLambda", "AcceptLicenseGrantLambda"],
+        ),
+        ("ShareVerifyExternalGrantPath", ["ShareAmiLambda", "VerifyExternalGrantLambda"]),
+        ("DoneLicenseGrantPath", ["PassDone", "CreateLicenseGrantLambda", "AcceptLicenseGrantLambda"]),
+    ),
+)
+def test_ami_sharing_licenses_an_image_built_on_a_marketplace_ami(
+    test_name, license_states, start_execution, wait_for_execution, mocked_test_event
+):
+    # ARRANGE
+
+    # ACT
+    execution_arn = start_execution(test_name=test_name, test_event=mocked_test_event())
+    status, output, history = wait_for_execution(execution_arn=execution_arn)
+
+    # ASSERT
+    assertpy.assert_that(status).is_equal_to("SUCCEEDED")
+    entered_states = _entered_states(history)
+    assertpy.assert_that(entered_states).contains(
+        *license_states, "LicenseDecisionChoice", "VerifyLaunchPermissionLambda", "SucceedAmiSharingLambda"
+    )
+    output_parsed = json.loads(output)
+    assertpy.assert_that(output_parsed["succeedAmiSharingResponse"]["eventType"]).is_equal_to(
+        "SucceedAmiSharingResponse"
+    )

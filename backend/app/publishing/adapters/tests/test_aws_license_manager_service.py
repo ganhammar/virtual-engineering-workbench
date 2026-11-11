@@ -148,3 +148,53 @@ def test_should_skip_accept_when_grant_already_active(mock_moto_calls, get_licen
     mock_moto_calls["AcceptGrant"].assert_not_called()
     mock_moto_calls["CreateGrantVersion"].assert_not_called()
     mock_moto_calls["ListReceivedGrants"].assert_called_once_with(GrantArns=[grant_arn])
+
+
+def test_should_recover_existing_grant_from_a_later_page_of_distributed_grants(
+    mock_moto_calls, get_license_manager_srv
+):
+    # ARRANGE
+    from botocore.exceptions import ClientError
+
+    principal_arn = f"arn:aws:iam::{TEST_SPOKE_ACCOUNT_ID}:root"
+    mock_moto_calls["CreateGrant"].side_effect = ClientError(
+        {
+            "Error": {
+                "Code": "ValidationException",
+                "Message": "Grant cannot be created because the Grant recipient account already has a grant for this license or product.",
+            }
+        },
+        "CreateGrant",
+    )
+    mock_moto_calls["ListDistributedGrants"].side_effect = [
+        {
+            "Grants": [
+                {
+                    "GrantArn": "arn:aws:license-manager:us-east-1:999888777666:grant:g-other",
+                    "GranteePrincipalArn": "arn:aws:iam::111122223333:root",
+                    "GrantStatus": "ACTIVE",
+                }
+            ],
+            "NextToken": "page-2",
+        },
+        {
+            "Grants": [
+                {"GrantArn": TEST_GRANT_ARN, "GranteePrincipalArn": principal_arn, "GrantStatus": "ACTIVE"},
+            ]
+        },
+    ]
+
+    # ACT
+    result = get_license_manager_srv.create_grant(
+        license_arn=TEST_LICENSE_ARN,
+        principal_arn=principal_arn,
+        grant_name="test-grant",
+        home_region="us-east-1",
+    )
+
+    # ASSERT
+    assertpy.assert_that(result.grantArn).is_equal_to(TEST_GRANT_ARN)
+    assertpy.assert_that(result.status).is_equal_to("ACTIVE")
+    assertpy.assert_that(mock_moto_calls["ListDistributedGrants"].call_args_list[1].kwargs).contains_entry(
+        {"NextToken": "page-2"}
+    )

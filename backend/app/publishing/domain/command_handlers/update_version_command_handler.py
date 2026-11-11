@@ -125,10 +125,13 @@ def __prepare_additional_attributes(command, product_entity, amis_qry_srv):
         additional_attributes["platform"] = ami.platform
         additional_attributes["architecture"] = ami.architecture
         additional_attributes["integrations"] = ami.integrations or []
-        if ami.imageSource:
-            additional_attributes["imageSource"] = ami.imageSource
-            if ami.marketplaceMetadata:
-                additional_attributes["marketplaceMetadata"] = ami.marketplaceMetadata.model_dump()
+        # Both are written even when the AMI has none, so nothing from the version's previous AMI
+        # decides how the new one is shared or licensed. An image built on top of a Marketplace AMI
+        # has no image source but keeps the product's licence metadata.
+        additional_attributes["imageSource"] = ami.imageSource
+        additional_attributes["marketplaceMetadata"] = (
+            ami.marketplaceMetadata.model_dump() if ami.marketplaceMetadata else None
+        )
     return additional_attributes
 
 

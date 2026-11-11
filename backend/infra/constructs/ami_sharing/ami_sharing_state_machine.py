@@ -136,6 +136,7 @@ class AmiSharingStateMachine(constructs.Construct):
                 "licenseArn.$": "$.Payload.licenseArn",
                 "homeRegion.$": "$.Payload.homeRegion",
                 "grantName.$": "$.Payload.grantName",
+                "licenseDecision.$": "$.Payload.licenseDecision",
             },
             result_path="$.decideActionResponse",
         )
@@ -235,7 +236,9 @@ class AmiSharingStateMachine(constructs.Construct):
         )
         accept_license_grant_lambda.add_catch(fail_ami_sharing_lambda, result_path="$.error")
 
-        # Verify launch permission lambda (shared by LICENSE_GRANT and VERIFY_EXTERNAL_GRANT paths)
+        # Verify launch permission lambda (shared by LICENSE_GRANT and VERIFY_EXTERNAL_GRANT paths).
+        # $.copiedAmi holds the AMI the spoke account launches in its region on every path: the copy,
+        # the shared original, the one shared before, or the marketplace product's regional AMI.
         verify_launch_permission_lambda: sfn_tasks.LambdaInvoke = sfn_tasks.LambdaInvoke(
             self,
             "VerifyLaunchPermissionLambda",
@@ -243,7 +246,7 @@ class AmiSharingStateMachine(constructs.Construct):
             payload=sfn.TaskInput.from_object(
                 {
                     "eventType": "VerifyLicenseGrantRequest",
-                    "amiId.$": "$.decideActionResponse.imageId",
+                    "amiId.$": "$.copiedAmi.copiedAmiId",
                     "region.$": "$.decideActionResponse.region",
                     "awsAccountId.$": "$.awsAccountId",
                 }
@@ -294,10 +297,17 @@ class AmiSharingStateMachine(constructs.Construct):
         )
         verify_external_grant_choice.otherwise(fail_ami_sharing_lambda)
 
-        # Pass state for license grant path to set copiedAmi placeholder
+        # Pass states for the marketplace product paths: the seller's regional AMI is the one the
+        # spoke account launches, so it is stored as the copied ami id
         pass_license_grant: sfn.Pass = sfn.Pass(
             self,
             "PassLicenseGrant",
+            parameters={"copiedAmiId.$": "$.decideActionResponse.originalAmiId"},
+            result_path="$.copiedAmi",
+        )
+        pass_verify_external_grant: sfn.Pass = sfn.Pass(
+            self,
+            "PassVerifyExternalGrant",
             parameters={"copiedAmiId.$": "$.decideActionResponse.originalAmiId"},
             result_path="$.copiedAmi",
         )
@@ -361,29 +371,42 @@ class AmiSharingStateMachine(constructs.Construct):
         verify_copy_choice.otherwise(verify_copy_wait)
         verify_copy_wait.next(verify_copy_lambda)
 
-        # Define the 3 chains: COPY/SHARE/DONE
-        chain_copy = (
-            sfn.Chain.start(copy_ami_lambda)
-            .next(pass_copy)
-            .next(verify_copy_lambda)
-            .next(verify_copy_choice.afterwards())
-        )
-        chain_share = sfn.Chain.start(pass_share).next(share_ami_lambda)
-        chain_done = sfn.Chain.start(pass_done)
-
         # LICENSE_GRANT chain: CreateLicenseGrant → AcceptLicenseGrant → VerifyLaunchPermission
         chain_license_grant = (
-            sfn.Chain.start(pass_license_grant)
-            .next(create_license_grant_lambda)
+            sfn.Chain.start(create_license_grant_lambda)
             .next(accept_license_grant_lambda)
             .next(verify_launch_permission_lambda)
         )
 
         # VERIFY_EXTERNAL_GRANT chain: VerifyExternalGrant → Choice(grantVerified?) → VerifyLaunchPermission
-        chain_verify_external_grant = sfn.Chain.start(verify_external_grant_lambda).next(
-            verify_external_grant_choice.afterwards(include_otherwise=False)
+        chain_verify_external_grant = sfn.Chain.start(verify_external_grant_lambda).next(verify_external_grant_choice)
+
+        # License decision choice: once COPY, SHARE or DONE has made the AMI launchable in the spoke
+        # account, an image built on top of a Marketplace AMI also needs the product's licence there
+        license_decision_choice: sfn.Choice = sfn.Choice(self, "LicenseDecisionChoice")
+        license_decision_choice.when(
+            sfn.Condition.string_equals("$.decideActionResponse.licenseDecision", "LICENSE_GRANT"),
+            chain_license_grant,
+        )
+        license_decision_choice.when(
+            sfn.Condition.string_equals("$.decideActionResponse.licenseDecision", "VERIFY_EXTERNAL_GRANT"),
+            chain_verify_external_grant,
+        )
+        license_decision_choice.otherwise(succeed_ami_sharing_lambda)
+
+        # Define the 3 chains: COPY/SHARE/DONE, each continuing with the license decision
+        chain_copy = sfn.Chain.start(copy_ami_lambda).next(pass_copy).next(verify_copy_lambda).next(verify_copy_choice)
+        chain_share = sfn.Chain.start(pass_share).next(share_ami_lambda).next(license_decision_choice)
+        chain_done = sfn.Chain.start(pass_done).next(license_decision_choice)
+
+        # Marketplace product chains: the seller's AMI is launchable already, so only the license step runs
+        chain_marketplace_license_grant = sfn.Chain.start(pass_license_grant).next(chain_license_grant)
+        chain_marketplace_verify_external_grant = sfn.Chain.start(pass_verify_external_grant).next(
+            chain_verify_external_grant
         )
 
+        verify_launch_permission_lambda.next(succeed_ami_sharing_lambda)
+        succeed_ami_sharing_lambda.next(success_state)
         fail_ami_sharing_lambda.next(fail_state)
 
         # Decide action choice
@@ -395,11 +418,12 @@ class AmiSharingStateMachine(constructs.Construct):
             sfn.Condition.string_equals("$.decideActionResponse.decision", "NOT_REQUIRED"), chain_done
         )
         decide_action_choice.when(
-            sfn.Condition.string_equals("$.decideActionResponse.decision", "LICENSE_GRANT"), chain_license_grant
+            sfn.Condition.string_equals("$.decideActionResponse.decision", "LICENSE_GRANT"),
+            chain_marketplace_license_grant,
         )
         decide_action_choice.when(
             sfn.Condition.string_equals("$.decideActionResponse.decision", "VERIFY_EXTERNAL_GRANT"),
-            chain_verify_external_grant,
+            chain_marketplace_verify_external_grant,
         )
         decide_action_choice.otherwise(fail_ami_sharing_lambda)
 
@@ -423,9 +447,7 @@ class AmiSharingStateMachine(constructs.Construct):
                 sfn.Chain.start(start_state)
                 .next(check_old_version_id_choice.afterwards())
                 .next(decide_action_lambda)
-                .next(decide_action_choice.afterwards())
-                .next(succeed_ami_sharing_lambda)
-                .next(success_state)
+                .next(decide_action_choice)
             ),
         )
 

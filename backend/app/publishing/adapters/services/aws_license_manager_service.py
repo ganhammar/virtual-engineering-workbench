@@ -115,11 +115,15 @@ class AwsLicenseManagerService(LicenseManagerService):
     def _find_existing_grant(
         self, client: LicenseManagerClient, license_arn: str, principal_arn: str
     ) -> Optional[LicenseGrantResult]:
-        response = client.list_distributed_grants(Filters=[{"Name": "LicenseArn", "Values": [license_arn]}])
-        for grant in response.get("Grants", []):
-            if grant.get("GranteePrincipalArn") == principal_arn and grant.get("GrantStatus") != "DELETED":
-                return LicenseGrantResult(grantArn=grant["GrantArn"], status=grant["GrantStatus"])
-        return None
+        request: dict[str, Any] = {"Filters": [{"Name": "LicenseArn", "Values": [license_arn]}]}
+        while True:
+            response = client.list_distributed_grants(**request)
+            for grant in response.get("Grants", []):
+                if grant.get("GranteePrincipalArn") == principal_arn and grant.get("GrantStatus") != "DELETED":
+                    return LicenseGrantResult(grantArn=grant["GrantArn"], status=grant["GrantStatus"])
+            if not response.get("NextToken"):
+                return None
+            request["NextToken"] = response["NextToken"]
 
     def accept_grant(self, grant_arn: str, home_region: str, spoke_account_id: str) -> None:
         try:

@@ -50,6 +50,33 @@
                     "DecideActionLambda": "MockedDecideActionLambdaVerifyExternalGrant",
                     "VerifyExternalGrantLambda": "MockedVerifyExternalGrantLambdaNotFound",
                     "SucceedAmiSharingLambda": "MockedSucceedAmiSharingLambda"
+                },
+                "CopyLicenseGrantPath": {
+                    "FailAmiSharingLambda": "MockedFailAmiSharingLambda",
+                    "DecideActionLambda": "MockedDecideActionLambdaCopyLicenseGrant",
+                    "CopyAmiLambda": "MockedCopyAmiLambda",
+                    "VerifyCopyLambda": "MockedVerifyCopyLambda",
+                    "ShareAmiLambda": "MockedShareAmiLambda",
+                    "CreateLicenseGrantLambda": "MockedCreateLicenseGrantLambda",
+                    "AcceptLicenseGrantLambda": "MockedAcceptLicenseGrantLambda",
+                    "VerifyLaunchPermissionLambda": "MockedVerifyLaunchPermissionLambda",
+                    "SucceedAmiSharingLambda": "MockedSucceedAmiSharingLambda"
+                },
+                "ShareVerifyExternalGrantPath": {
+                    "FailAmiSharingLambda": "MockedFailAmiSharingLambda",
+                    "DecideActionLambda": "MockedDecideActionLambdaShareVerifyExternalGrant",
+                    "ShareAmiLambda": "MockedShareAmiLambda",
+                    "VerifyExternalGrantLambda": "MockedVerifyExternalGrantLambdaSuccess",
+                    "VerifyLaunchPermissionLambda": "MockedVerifyLaunchPermissionLambda",
+                    "SucceedAmiSharingLambda": "MockedSucceedAmiSharingLambda"
+                },
+                "DoneLicenseGrantPath": {
+                    "FailAmiSharingLambda": "MockedFailAmiSharingLambda",
+                    "DecideActionLambda": "MockedDecideActionLambdaDoneLicenseGrant",
+                    "CreateLicenseGrantLambda": "MockedCreateLicenseGrantLambda",
+                    "AcceptLicenseGrantLambda": "MockedAcceptLicenseGrantLambda",
+                    "VerifyLaunchPermissionLambda": "MockedVerifyLaunchPermissionLambda",
+                    "SucceedAmiSharingLambda": "MockedSucceedAmiSharingLambda"
                 }
             }
         }
@@ -72,7 +99,13 @@
                         "decision": "COPY",
                         "originalAmiId": "ami-12345",
                         "copiedAmiId": null,
-                        "region": "eu-west-3"
+                        "region": "eu-west-3",
+                        "licenseDecision": "NOT_REQUIRED",
+                        "imageId": null,
+                        "projectId": null,
+                        "licenseArn": null,
+                        "homeRegion": null,
+                        "grantName": null
                     }
                 }
             }
@@ -85,7 +118,13 @@
                         "decision": "SHARE",
                         "originalAmiId": "ami-12345",
                         "copiedAmiId": null,
-                        "region": "eu-west-3"
+                        "region": "eu-west-3",
+                        "licenseDecision": "NOT_REQUIRED",
+                        "imageId": null,
+                        "projectId": null,
+                        "licenseArn": null,
+                        "homeRegion": null,
+                        "grantName": null
                     }
                 }
             }
@@ -98,7 +137,13 @@
                         "decision": "DONE",
                         "originalAmiId": "ami-12345",
                         "copiedAmiId": "ami-54321",
-                        "region": "eu-west-3"
+                        "region": "eu-west-3",
+                        "licenseDecision": "NOT_REQUIRED",
+                        "imageId": null,
+                        "projectId": null,
+                        "licenseArn": null,
+                        "homeRegion": null,
+                        "grantName": null
                     }
                 }
             }
@@ -111,7 +156,13 @@
                         "decision": "LICENSE_GRANT",
                         "originalAmiId": "ami-12345",
                         "copiedAmiId": null,
-                        "region": "eu-west-3"
+                        "region": "eu-west-3",
+                        "licenseDecision": "LICENSE_GRANT",
+                        "imageId": "ami-12345",
+                        "projectId": "proj-12345",
+                        "licenseArn": "arn:aws:license-manager:us-east-1:123456789012:license:l-12345",
+                        "homeRegion": "us-east-1",
+                        "grantName": "VEW-prod-dt3ycosm-105249321508"
                     }
                 }
             }
@@ -124,7 +175,70 @@
                         "decision": "VERIFY_EXTERNAL_GRANT",
                         "originalAmiId": "ami-12345",
                         "copiedAmiId": null,
-                        "region": "eu-west-3"
+                        "region": "eu-west-3",
+                        "licenseDecision": "VERIFY_EXTERNAL_GRANT",
+                        "imageId": "ami-12345",
+                        "projectId": "proj-12345",
+                        "licenseArn": "arn:aws:license-manager:us-east-1:123456789012:license:l-12345",
+                        "homeRegion": "us-east-1",
+                        "grantName": "VEW-prod-dt3ycosm-105249321508"
+                    }
+                }
+            }
+        },
+        "MockedDecideActionLambdaCopyLicenseGrant": {
+            "0": {
+                "Return": {
+                    "Payload": {
+                        "eventType": "DecideActionResponse",
+                        "decision": "COPY",
+                        "originalAmiId": "ami-12345",
+                        "copiedAmiId": null,
+                        "region": "eu-west-3",
+                        "licenseDecision": "LICENSE_GRANT",
+                        "imageId": "ami-12345",
+                        "projectId": "proj-12345",
+                        "licenseArn": "arn:aws:license-manager:us-east-1:123456789012:license:l-12345",
+                        "homeRegion": "us-east-1",
+                        "grantName": "VEW-prod-dt3ycosm-105249321508"
+                    }
+                }
+            }
+        },
+        "MockedDecideActionLambdaShareVerifyExternalGrant": {
+            "0": {
+                "Return": {
+                    "Payload": {
+                        "eventType": "DecideActionResponse",
+                        "decision": "SHARE",
+                        "originalAmiId": "ami-12345",
+                        "copiedAmiId": null,
+                        "region": "eu-west-3",
+                        "licenseDecision": "VERIFY_EXTERNAL_GRANT",
+                        "imageId": "ami-12345",
+                        "projectId": "proj-12345",
+                        "licenseArn": "arn:aws:license-manager:us-east-1:123456789012:license:l-12345",
+                        "homeRegion": "us-east-1",
+                        "grantName": "VEW-prod-dt3ycosm-105249321508"
+                    }
+                }
+            }
+        },
+        "MockedDecideActionLambdaDoneLicenseGrant": {
+            "0": {
+                "Return": {
+                    "Payload": {
+                        "eventType": "DecideActionResponse",
+                        "decision": "DONE",
+                        "originalAmiId": "ami-12345",
+                        "copiedAmiId": "ami-54321",
+                        "region": "eu-west-3",
+                        "licenseDecision": "LICENSE_GRANT",
+                        "imageId": "ami-12345",
+                        "projectId": "proj-12345",
+                        "licenseArn": "arn:aws:license-manager:us-east-1:123456789012:license:l-12345",
+                        "homeRegion": "us-east-1",
+                        "grantName": "VEW-prod-dt3ycosm-105249321508"
                     }
                 }
             }
@@ -172,7 +286,9 @@
                 "Return": {
                     "Payload": {
                         "eventType": "CreateLicenseGrantResponse",
-                        "grantArn": "arn:aws:license-manager::123456789012:grant/g-12345"
+                        "grantId": "lg-12345",
+                        "grantArn": "arn:aws:license-manager::123456789012:grant/g-12345",
+                        "homeRegion": "us-east-1"
                     }
                 }
             }
@@ -191,7 +307,7 @@
                 "Return": {
                     "Payload": {
                         "eventType": "VerifyLicenseGrantResponse",
-                        "launchPermissionVerified": true
+                        "isAccessible": true
                     }
                 }
             }

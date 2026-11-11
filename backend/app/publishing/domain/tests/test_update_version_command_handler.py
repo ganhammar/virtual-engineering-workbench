@@ -9,7 +9,7 @@ from app.publishing.domain.command_handlers import update_version_command_handle
 from app.publishing.domain.commands import update_version_command
 from app.publishing.domain.events import product_version_update_started
 from app.publishing.domain.exceptions import domain_exception
-from app.publishing.domain.model import product, version
+from app.publishing.domain.model import marketplace_metadata, product, version
 from app.publishing.domain.ports import (
     amis_query_service,
     iac_service,
@@ -279,6 +279,8 @@ def test_handle_should_update_version_if_version_in_repository(
         platform=test_ami.platform,
         architecture=test_ami.architecture,
         integrations=test_ami.integrations or [],
+        imageSource=None,
+        marketplaceMetadata=None,
         draftTemplateLocation="prod-11111111/version-123/draft_workbench.yml",
     )
     mock_unit_of_work.commit.assert_called()
@@ -502,6 +504,8 @@ def test_handle_should_update_version_if_ami_has_no_components_details(
         platform=test_ami.platform,
         architecture=test_ami.architecture,
         integrations=test_ami.integrations or [],
+        imageSource=None,
+        marketplaceMetadata=None,
         draftTemplateLocation="prod-11111111/version-123/draft_workbench.yml",
     )
     mock_unit_of_work.commit.assert_called()
@@ -513,3 +517,56 @@ def test_handle_should_update_version_if_ami_has_no_components_details(
             product_type="WORKBENCH",
         )
     )
+
+
+@pytest.mark.parametrize(
+    "previous_release_name,version_type",
+    (("1.2.3-rc.1", version.VersionType.ReleaseCandidate.text),),
+)
+@pytest.mark.parametrize("image_source", (None, "MARKETPLACE_PRODUCT"))
+@freeze_time("2023-06-20")
+def test_handle_should_write_marketplace_metadata_whatever_the_image_source(
+    previous_release_name,
+    version_type,
+    image_source,
+    mock_command,
+    version_query_service_mock,
+    stack_service_mock,
+    amis_query_service_mock,
+    get_test_ami,
+    file_service_mock,
+    template_service_mock,
+    mock_unit_of_work,
+    message_bus_mock,
+    get_product,
+    mock_products_repo,
+    mock_version_repo,
+):
+    # ARRANGE
+    mock_products_repo.get.return_value = get_product()
+    metadata = marketplace_metadata.MarketplaceMetadata(
+        productCode="abc123def456ghi",
+        subscriptionOwnership="VEW_MANAGED",
+        licenseConfigurationArn="arn:aws:license-manager:us-east-1:123456789012:license:l-abc123",
+        homeRegion="us-east-1",
+    )
+    amis_query_service_mock.get_ami.return_value = get_test_ami().model_copy(
+        update={"imageSource": image_source, "marketplaceMetadata": metadata}
+    )
+
+    # ACT
+    update_version_command_handler.handle(
+        command=mock_command(),
+        uow=mock_unit_of_work,
+        message_bus=message_bus_mock,
+        version_qry_srv=version_query_service_mock,
+        stack_srv=stack_service_mock,
+        amis_qry_srv=amis_query_service_mock,
+        file_service=file_service_mock,
+        template_query_service=template_service_mock,
+    )
+
+    # ASSERT
+    updated_attributes = mock_version_repo.update_attributes.call_args.kwargs
+    assertpy.assert_that(updated_attributes["imageSource"]).is_equal_to(image_source)
+    assertpy.assert_that(updated_attributes["marketplaceMetadata"]).is_equal_to(metadata.model_dump())
