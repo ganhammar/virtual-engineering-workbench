@@ -92,6 +92,7 @@ from app.packaging.domain.value_objects.recipe_version import (
     recipe_version_description_value_object,
     recipe_version_id_value_object,
     recipe_version_integration_value_object,
+    recipe_version_parent_image_id_value_object,
     recipe_version_release_type_value_object,
     recipe_version_status_value_object,
     recipe_version_volume_size_value_object,
@@ -984,6 +985,11 @@ def create_recipe_version(
         recipeVersionIntegrations=recipe_version_integration_value_object.from_str_array(
             request.recipeVersionIntegrations or []
         ),
+        parentImageId=(
+            recipe_version_parent_image_id_value_object.from_str(request.parentImageId)
+            if request.parentImageId
+            else None
+        ),
         createdBy=user_id_value_object.from_str(app.context.get("user_principal").user_name),
     )
 
@@ -1137,6 +1143,11 @@ def update_recipe_version(
         ),
         recipeVersionDescription=recipe_version_description_value_object.from_str(request.recipeVersionDescription),
         recipeVersionVolumeSize=recipe_version_volume_size_value_object.from_str(request.recipeVersionVolumeSize),
+        parentImageId=(
+            recipe_version_parent_image_id_value_object.from_str(request.parentImageId)
+            if request.parentImageId
+            else None
+        ),
         lastUpdatedBy=user_id_value_object.from_str(app.context.get("user_principal").user_name),
     )
 
